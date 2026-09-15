@@ -79,9 +79,21 @@ async function handleQuote(request, env) {
     });
     if (!yahooRes.ok) return json({ error: `Yahoo responded with ${yahooRes.status}` }, 502);
     const data = await yahooRes.json();
-    const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    const result = data?.chart?.result?.[0];
+    const price = result?.meta?.regularMarketPrice;
     if (typeof price !== 'number') return json({ error: 'No price in Yahoo response' }, 502);
-    return json({ symbol, price });
+
+    // The genuine session opening price - the first real (non-null) entry in
+    // today's minute-by-minute open series, not just "whatever price someone
+    // happened to glance at" a few minutes into trading.
+    let dayOpen = null;
+    const opens = result?.indicators?.quote?.[0]?.open;
+    if (Array.isArray(opens)) {
+      const firstValid = opens.find(v => typeof v === 'number');
+      if (typeof firstValid === 'number') dayOpen = firstValid;
+    }
+
+    return json({ symbol, price, dayOpen });
   } catch (err) {
     return json({ error: 'Fetch failed', detail: String(err) }, 500);
   }
